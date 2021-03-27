@@ -42,12 +42,12 @@ public class MongoHook {
 	@Getter private Host[] hosts;
 	@Getter @Setter private Logger logger;
 	@Getter @Setter private boolean loggerEnabled = true;
-	@Getter private boolean isAsync;
+	@Getter private boolean async;
 	@Getter private Thread thread;
 	@Getter private boolean ssl = false;
 	
 	public MongoHook(boolean isAsync, Host... hosts) {
-		this.isAsync = isAsync;
+		this.async = isAsync;
 		this.logger = LogManager.getLogger(MongoHook.class);
 		this.hosts = hosts;
 	}
@@ -56,21 +56,16 @@ public class MongoHook {
 		this(true, hosts);
 	}
 
-	public MongoHook start() {
-		if(isAsync) {
-			this.thread = new Thread() {
-				@Override
-				public void run() {
-					connect();
-				}
-			};
-			thread.run();
-		}else {
-			connect();
-		}
-		return this;
-	}
-	
+	  public MongoHook start() {
+		    if(async) {
+		      this.thread = new Thread(this::connect);
+		      thread.start();
+		    }else {
+		      connect();
+		    }
+		    return this;
+	  }
+	  
 	private void connect() {
 		try {
 			log("Connecting to mongoDB...");
@@ -117,15 +112,8 @@ public class MongoHook {
 	}
 
 	@SuppressWarnings("unchecked")
-	/*
-	 * @param id Element id
-	 * @param data object in question
-	 */
-	public void saveObject(String id, Object data) {
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
-		
+	private Map<String,Object> getVariableMap(String id, Object data){
+		isReady();
 		Map<String, Object> variableMap = new HashMap<>();
 		
     	for(Field field : data.getClass().getDeclaredFields()) {
@@ -144,7 +132,6 @@ public class MongoHook {
         		try{
         			MongoClient.getDefaultCodecRegistry().get(field.get(data).getClass());
         		}catch(CodecConfigurationException e) {
-        			System.out.println(field.getType());
             		if(field.getAnnotation(Serializer.class) == null) {
             			Gson gson = new Gson();
             			value = "MHJSON:" + gson.toJson(value);
@@ -157,6 +144,17 @@ public class MongoHook {
     			e.printStackTrace();
     		}
     	}
+    	return variableMap;
+	}
+	
+	/*
+	 * @param id Element id
+	 * @param data object in question
+	 */
+	public void saveObject(String id, Object data) {
+		isReady();
+		
+		Map<String, Object> variableMap = getVariableMap(id, data);
     	
     	Document document = collection.find(new Document("_id", id)).first();
     	if(document == null){
@@ -186,9 +184,7 @@ public class MongoHook {
 	 * @param clazz class of object being returned
 	 */
 	public <T> T getObject(String searchValue, String columnName, Class<T> clazz){
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
+		isReady();
 		
 		T object = null;
 		try {
@@ -245,9 +241,7 @@ public class MongoHook {
 	 * @param columnName name of variable column
 	 */
 	public void deleteObject(String searchValue, String columnName) {
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
+		isReady();
 		
 		Document document = new Document(columnName, searchValue);
 		collection.deleteOne(document);
@@ -258,9 +252,7 @@ public class MongoHook {
 	 * @param columnName name of variable column
 	 */
 	public boolean objectExists(String searchValue, String columnName) {
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
+		isReady();
 		Document document = collection.find(new Document(columnName, searchValue)).first();
 		return document != null;
 	}
@@ -270,9 +262,7 @@ public class MongoHook {
 	 * @param columnName name of variable column
 	 */
 	public boolean valueExists(String searchValue, String columnName) {
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
+		isReady();
 
 		Document document = collection.find(new Document(columnName, searchValue)).first();
 		return document != null;
@@ -282,9 +272,7 @@ public class MongoHook {
 	 * @param columnName name of variable column
 	 */
 	public List<String> getAllValues(String columnName){
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
+		isReady();
 	    
 	    FindIterable<Document> iterDoc = collection.find();
 	    MongoCursor<Document> it = iterDoc.iterator();
@@ -302,10 +290,8 @@ public class MongoHook {
 	 * @param value value being inserted
 	 */
 	public void saveValue(String id, String columnName, Object value) {
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
-
+		isReady();
+		
 		Document found = collection.find(new Document("_id", id)).first();	    
 		if(found == null) {
 			Document document = new Document("_id", id);
@@ -325,9 +311,7 @@ public class MongoHook {
 	 * @param clazz class of object being returned
 	 */
 	public <T> T getValue(String id, String columnName, Class<T> clazz) {
-		Preconditions.checkArgument(mongoClient != null, "Client not connected");
-	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
-	    Preconditions.checkArgument(collection != null, "Collection is not set");
+		isReady();
 	    
 		Document document = (Document) collection.find(new Document("_id", id)).first();
 		if(document == null) return null;
@@ -346,6 +330,12 @@ public class MongoHook {
 	
 	public void disable() {
 		mongoClient.close();
+	}
+	
+	private void isReady() {
+		Preconditions.checkArgument(mongoClient != null, "Client not connected");
+	    Preconditions.checkArgument(mongoDatabase != null, "Database is not set");
+	    Preconditions.checkArgument(collection != null, "Collection is not set");
 	}
 }
 
