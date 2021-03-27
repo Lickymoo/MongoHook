@@ -70,7 +70,7 @@ MyObject myObject = mongoHook.getValue(ID, COLUMN NAME, MyObject.class);
 
 ## Serializing complex objects
 By default, MongoHook uses Gson to serialize objects, so in theory, you do not need to use a serializer.
-However, in the case of needing to save data in a different format or Gson not supporting your codec, MongoHook provides the `VariableSerializer` class
+However, in the case of needing to save data in a different format or Gson not supporting your codec, MongoHook provides the `VariableSerializer` interface
 
 ```java
 public class MyClassToBeSaved{
@@ -80,7 +80,7 @@ public class MyClassToBeSaved{
 ```
 
 ```java
-public class MyObjectSerializer extends VariableSerializer<MyObject>{
+public class MyObjectSerializer implements VariableSerializer<MyObject>{
   @Override
   public String serialize(MyObject obj) {    	
   //Serialize
