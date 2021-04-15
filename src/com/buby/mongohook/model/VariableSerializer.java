@@ -1,7 +1,9 @@
-package me.buby.mongohook;
+package com.buby.mongohook.model;
 
-public abstract interface VariableSerializer<T> {
+public interface VariableSerializer<T> {
+
 	public abstract String serialize(T obj);
 	
 	public abstract T deserialize(String str);
+
 }

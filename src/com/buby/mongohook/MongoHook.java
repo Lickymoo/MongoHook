@@ -1,10 +1,7 @@
-package me.buby.mongohook;
+package com.buby.mongohook;
 
-import java.io.FileInputStream;
-import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -13,10 +10,13 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bson.Document;
-import org.bson.codecs.Codec;
-import org.bson.codecs.configuration.CodecConfigurationException;
 import org.bson.conversions.Bson;
 
+import com.buby.mongohook.annotation.Exclude;
+import com.buby.mongohook.annotation.Serializer;
+import com.buby.mongohook.model.Host;
+import com.buby.mongohook.model.VariableSerializer;
+import com.buby.mongohook.util.MongoHookUtils;
 import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.mongodb.MongoClient;
@@ -30,8 +30,6 @@ import com.mongodb.client.MongoDatabase;
 
 import lombok.Getter;
 import lombok.Setter;
-import me.buby.mongohook.annotation.Exclude;
-import me.buby.mongohook.annotation.Serializer;
 
 public class MongoHook {
 
@@ -39,16 +37,17 @@ public class MongoHook {
 	private MongoDatabase mongoDatabase = null;
 	private MongoCollection<Document> collection = null;
 	
-	@Getter private Host[] hosts;
 	@Getter @Setter private Logger logger;
 	@Getter @Setter private boolean loggerEnabled = true;
-	@Getter private boolean async;
+	@Getter private Host[] hosts;
 	@Getter private Thread thread;
+	@Getter private boolean async;
 	@Getter private boolean ssl = false;
+	@Getter private boolean connected = false;
 	
 	public MongoHook(boolean isAsync, Host... hosts) {
-		this.async = isAsync;
 		this.logger = LogManager.getLogger(MongoHook.class);
+		this.async = isAsync;
 		this.hosts = hosts;
 	}
 	
@@ -56,15 +55,22 @@ public class MongoHook {
 		this(true, hosts);
 	}
 
-	  public MongoHook start() {
+	public MongoHook start() {
 		    if(async) {
-		      this.thread = new Thread(this::connect);
+		      this.thread = new Thread() {
+		    	  @Override
+		    	  public void run() {
+		    		  connect();
+		    	  }
+		      };
 		      thread.start();
 		    }else {
 		      connect();
 		    }
-		    return this;
-	  }
+		    
+		while(!connected);
+		return this;
+	}
 	  
 	private void connect() {
 		try {
@@ -81,6 +87,7 @@ public class MongoHook {
 			}
 			
 			mongoClient = new MongoClient(addresses, auth, options);	
+			connected = true;
 		}catch(Exception e) {
 			e.printStackTrace();
 		}
@@ -91,9 +98,13 @@ public class MongoHook {
 		return this;
 	}
 	
+	public MongoHook setAsync(boolean enabled) {
+		async = enabled;
+		return this;
+	}
+	
 	/*
 	 * @param database Mongo database name
-	 * @return MongoHook
 	 */
 	public MongoHook setDatabase(String database) {
 		Preconditions.checkArgument(mongoClient != null, "Client not connected");
@@ -110,42 +121,6 @@ public class MongoHook {
 		this.collection = mongoDatabase.getCollection(collection);	
 		return this;
 	}
-
-	@SuppressWarnings("unchecked")
-	private Map<String,Object> getVariableMap(String id, Object data){
-		isReady();
-		Map<String, Object> variableMap = new HashMap<>();
-		
-    	for(Field field : data.getClass().getDeclaredFields()) {
-    		try {
-    			field.setAccessible(true);
-    			Object value = field.get(data);
-    			if(field.getName().contains("SWITCH_TABLE")) continue;
-        		
-    			if(field.getAnnotation(Exclude.class) != null) continue;
-        		
-        		if(field.getAnnotation(Serializer.class) != null) {
-        			value = ((VariableSerializer<Object>)field.getAnnotation(Serializer.class).value().getDeclaredConstructor().newInstance()).serialize(field.get(data));
-        		}
-        		
-        		//No better way of checking if codec exists
-        		try{
-        			MongoClient.getDefaultCodecRegistry().get(field.get(data).getClass());
-        		}catch(CodecConfigurationException e) {
-            		if(field.getAnnotation(Serializer.class) == null) {
-            			Gson gson = new Gson();
-            			value = "MHJSON:" + gson.toJson(value);
-            		}
-            		
-        		}
-
-        		variableMap.put(field.getName(), value);
-    		}catch(Exception e) {
-    			e.printStackTrace();
-    		}
-    	}
-    	return variableMap;
-	}
 	
 	/*
 	 * @param id Element id
@@ -154,7 +129,7 @@ public class MongoHook {
 	public void saveObject(String id, Object data) {
 		isReady();
 		
-		Map<String, Object> variableMap = getVariableMap(id, data);
+		Map<String, Object> variableMap = MongoHookUtils.getVariableMap(data);
     	
     	Document document = collection.find(new Document("_id", id)).first();
     	if(document == null){
@@ -193,35 +168,22 @@ public class MongoHook {
 			Document document = collection.find(new Document(columnName, searchValue)).first();
 			if(document == null) return object;
 			for(Field field : clazz.getDeclaredFields()) {
-				try {
-					if(field == null) continue;
-					if(field.getName().isEmpty()) continue;
+				field.setAccessible(true);
+				if(field.getAnnotation(Exclude.class) != null) continue;
 					
-					field.setAccessible(true);
-					Object value = null;
+				Object value = document.get(field.getName());
     		
-					if(field.getAnnotation(Exclude.class) != null) continue;
-	        		if(field.getAnnotation(Serializer.class) != null) {
-	        			value = ((VariableSerializer<?>)field.getAnnotation(Serializer.class).value().getDeclaredConstructor().newInstance()).deserialize(document.getString(field.getName()));
-	        		}else {
-	        			value = document.get(field.getName());
-	        		}
-						
-	        		try{
-	        			MongoClient.getDefaultCodecRegistry().get(field.get(object).getClass());
-	        		}catch(CodecConfigurationException e) {
-	            		if(field.getAnnotation(Serializer.class) == null) {
-	            			Gson gson = new Gson();
-	            			value = gson.fromJson(document.getString(field.getName()).replace("MHJSON:", ""), field.get(object).getClass());
-	            		}
-	            		
-	        		}
-
-					field.set(object, value);
-
-				}catch(Exception e) {
-					e.printStackTrace();
+				if(field.getAnnotation(Serializer.class) != null) {
+					value = ((VariableSerializer<?>)field.getAnnotation(Serializer.class).value().getDeclaredConstructor().newInstance()).deserialize(document.getString(field.getName()));
 				}
+						
+				if(!MongoHookUtils.mongoHasCodec(field.get(object).getClass()) &&
+					field.getAnnotation(Serializer.class) == null){
+					Gson gson = new Gson();
+					value = gson.fromJson(document.getString(field.getName()).replace("MHJSON:", ""), field.get(object).getClass());
+				}
+	        		
+				field.set(object, value);
 			}
 		}catch(Exception e) {
 			e.printStackTrace();
@@ -281,7 +243,7 @@ public class MongoHook {
 	    	Document doc = new Document(it.next());
 	    	ret.add(doc.getString(columnName));
 	    }
-	    return ret;
+	    return ret;    
 	}
 	
 	/*
@@ -304,7 +266,6 @@ public class MongoHook {
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
 	/*
 	 * @param id ID of element
 	 * @param columnName name of variable column
@@ -315,7 +276,8 @@ public class MongoHook {
 	    
 		Document document = (Document) collection.find(new Document("_id", id)).first();
 		if(document == null) return null;
-		return (T) document.get(columnName);
+		if(!document.get(columnName).getClass().isAssignableFrom(clazz)) return null;
+		return clazz.cast(document.get(columnName));
 	}
 	
 	private void log(Level level, String str, Object... args) {
@@ -324,12 +286,12 @@ public class MongoHook {
 	}
 	
 	private void log(String str, Object... args) {
-		if(!loggerEnabled) return;
-		logger.log(Level.INFO, String.format(str, args));
+		log(Level.INFO, str, args);
 	}
 	
 	public void disable() {
 		mongoClient.close();
+		connected = false;
 	}
 	
 	private void isReady() {

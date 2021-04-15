@@ -1,4 +1,4 @@
-package me.buby.mongohook.annotation;
+package com.buby.mongohook.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

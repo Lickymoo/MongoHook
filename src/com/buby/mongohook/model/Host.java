@@ -1,4 +1,4 @@
-package me.buby.mongohook;
+package com.buby.mongohook.model;
 
 import com.mongodb.MongoCredential;
 
