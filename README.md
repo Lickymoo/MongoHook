@@ -9,7 +9,36 @@ A java mongoDB utility
 1. Excluding a variable from serialization
 
 ## Installing
-
+Maven
+```xml
+	<repositories>
+		<repository>
+		    <id>jitpack.io</id>
+		    <url>https://jitpack.io</url>
+		</repository>
+	</repositories>
+```
+```xml
+        <dependency>
+	    <groupId>com.github.Lickymoo</groupId>
+	    <artifactId>MongoHook</artifactId>
+	    <version>-SNAPSHOT</version>
+	</dependency>
+```  
+  
+Grade
+```
+	allprojects {
+		repositories {
+			...
+			maven { url 'https://jitpack.io' }
+		}
+	}
+  
+	dependencies {
+	        implementation 'com.github.Lickymoo:MongoHook:-SNAPSHOT'
+	}  
+```
 
 ## Getting Started
 To get started simply create a new `MongoHook` class
