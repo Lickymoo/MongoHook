@@ -22,7 +22,7 @@ Maven
         <dependency>
 	    <groupId>com.github.Lickymoo</groupId>
 	    <artifactId>MongoHook</artifactId>
-	    <version>-SNAPSHOT</version>
+	    <version>LATEST-VERSION</version>
 	</dependency>
 ```  
   
@@ -36,7 +36,7 @@ Grade
 	}
   
 	dependencies {
-	        implementation 'com.github.Lickymoo:MongoHook:-SNAPSHOT'
+	        implementation 'com.github.Lickymoo:MongoHook:LATEST-VERSION'
 	}  
 ```
 
