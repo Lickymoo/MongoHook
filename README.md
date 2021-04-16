@@ -1,3 +1,4 @@
+[![](https://jitpack.io/v/Lickymoo/MongoHook.svg)](https://jitpack.io/#Lickymoo/MongoHook) [![CodeFactor](https://www.codefactor.io/repository/github/lickymoo/mongohook/badge)](https://www.codefactor.io/repository/github/lickymoo/mongohook)
 # MongoHook
 A java mongoDB utility
 
